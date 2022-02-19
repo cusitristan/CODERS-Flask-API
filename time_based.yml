@@ -1,0 +1,22 @@
+# This is a workflow that will set off on a regular time based interval
+name: time_based
+# Controls when the workflow will run
+on:
+  # Schedules when workflow runs
+  schedule:
+    # Every 20th of the month at 00:00 UTC
+    - cron: '0 0 20 * *'
+# What job to run
+jobs:
+  # Build and run app and run test scripts
+  test_schedule:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: ./action-a
+      - name: Run Unit tests
+        run: |
+          python ./test/unit_test.py
+#       - name: Run API tests
+#         run: | 
+#           python ./test/test_app.py
