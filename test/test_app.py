@@ -170,6 +170,18 @@ class TestApp(unittest.TestCase):
 		self.assertEqual(response_code, 404)
 		self.assertEqual(response_dict['message'], 'No hydro_monthly generators found in AB')
 
+	def test_return_based_on_limit(self):
+		response = requests.get(BASE +"/substations?limit=100")
+		response_code = response.status_code
+		response_dict = response.json()
+		self.assertEqual(response_code, 200)
+		self.assertEqual(len(response_dict), 100)
+
+	def test_return_based_on_non_int_limit(self):
+		response = requests.get(BASE +"/substations?limit=blah")
+		response_code = response.status_code
+		self.assertEqual(response_code, 404)
+
 	## TRY BREAK THE CODE
 	##=======================
 

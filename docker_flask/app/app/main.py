@@ -15,6 +15,7 @@ import yaml
 import os
 import json
 
+# come back and add the.classes
 from .classes.invalidUsage import InvalidUsage 
 from .classes.encoder import Encoder
 
@@ -22,6 +23,7 @@ app = Flask(__name__)
 
 ##Configure db
 db = yaml.load(open('/app/app/db.yaml'), Loader=yaml.FullLoader)
+
 # app.config['MYSQL_HOST'] = db['mysql_host'] #host.docker.internal
 # app.config['MYSQL_USER'] = db['mysql_user']
 # app.config['MYSQL_PASSWORD'] = db['mysql_password']
@@ -193,30 +195,31 @@ def return_table(table):
     province_1 = request.args.get('province1')
     province_2 = request.args.get('province2')
     region = request.args.get('region')
+    limit = request.args.get('limit')
     ## Redirect to the generator type filter
     if table == 'generators' and gen_type:
-        return return_generator_type(province, gen_type)
+        return return_generator_type(province, gen_type, limit)
     ## Redirect to the reference list
     elif table == 'references' and reference_key:
         return return_ref(reference_key)
     ## Redirect to international transfers
     elif table == 'international_transfers':
-        return return_international_hourly_transfers(year, province, us_region)
+        return return_international_hourly_transfers(year, province, us_region, limit)
     ## Redirect to interprovincial transfers
     elif table == 'interprovincial_transfers':
-        return return_interprovincial_hourly_transfer(year, province_1, province_2)
+        return return_interprovincial_hourly_transfer(year, province_1, province_2, limit)
     ## Redirect to provincal demand
     elif table == 'provincial_demand':
-        return return_provincial_hourly_demand(year, province)
+        return return_provincial_hourly_demand(year, province, limit)
     elif table == 'annual_demand_and_effeciencies':
-        return return_annual_demand_and_efficiencies(region)
+        return return_annual_demand_and_efficiencies(region, limit)
     elif table == 'hydro_capacity_factor':
-        return return_hydro_cf(year,province)
+        return return_hydro_cf(year,province, limit)
     elif table == 'regional_electrified_demand' or table == 'regional_heat_demand':
-        return return_regional_demand(table, year, region)
+        return return_regional_demand(table, year, region, limit)
     ## Redirect to the province filter
     elif province:
-        return return_based_on_prov(table, province)
+        return return_based_on_prov(table, province, limit)
     
     ## Join the subtables on the node table
     if table == "junctions":
@@ -259,10 +262,15 @@ def return_table(table):
     else:
         query = f"SELECT * FROM {table};"
 
+    if limit:
+        if not limit.isdigit():
+            raise InvalidUsage('Limit is not an integer',status_code=404)
+        query = query.replace(";", f" LIMIT {limit};")
+
     ## Get the column names and send the query
     column_names = get_columns(table)
     result = send_query(query)
-    print(column_names)
+   
     for i,row in enumerate(result):   
         row = dict(zip(column_names, row))
         result[i] = row
@@ -287,7 +295,7 @@ def return_columns(table, attributes):
     return json.dumps(attributes, cls= Encoder)
 
 ## Returns electrified demand based on region and year
-def return_regional_demand(table, year, region):
+def return_regional_demand(table, year, region, limit):
     if not region:
         raise InvalidUsage('No region provided', status_code=404)
     if not year:
@@ -300,6 +308,10 @@ def return_regional_demand(table, year, region):
                 (local_time LIKE '{int(year) + 1}%' AND \
                 annual_hour_end = 8760));"
 
+    if limit:
+        if not limit.isdigit():
+            raise InvalidUsage('Limit is not an integer',status_code=404)
+        query = query.replace(";", f" LIMIT {limit};")
     result = send_query(query)
     column_names = get_columns(table)
 
@@ -318,13 +330,17 @@ def return_regional_demand(table, year, region):
     return json.dumps(result, cls= Encoder)
     
 ## Returns annual demand and efficiencies from given region
-def return_annual_demand_and_efficiencies(region):
+def return_annual_demand_and_efficiencies(region, limit):
     if not region:
         raise InvalidUsage('No region provided', status_code=404)
     
     region = region.replace('_', ' ')
     query = f"SELECT * FROM annual_demand_and_effeciencies WHERE region = '{region}';"
     
+    if limit:
+        if not limit.isdigit():
+            raise InvalidUsage('Limit is not an integer',status_code=404)
+        query = query.replace(";", f" LIMIT {limit};")
     result = send_query(query)
     column_names = get_columns("annual_demand_and_effeciencies")
 
@@ -369,7 +385,7 @@ def return_ref(key):
     return json.dumps(source, cls= Encoder)
 
 ##Returns the specified table based on Province
-def return_based_on_prov(table, province):
+def return_based_on_prov(table, province, limit):
     if table not in accessible_tables:
         raise InvalidUsage('Table not recognized',status_code=404)
 
@@ -418,6 +434,10 @@ def return_based_on_prov(table, province):
     else:
         raise InvalidUsage('Table has no province attribute',status_code=404)
 
+    if limit:
+        if not limit.isdigit():
+            raise InvalidUsage('Limit is not an integer',status_code=404)
+        query = query.replace(";", f" LIMIT {limit};")
     result = send_query(query)
 
     ## Get the column names
@@ -437,7 +457,7 @@ def return_based_on_prov(table, province):
     return json.dumps(result, cls= Encoder)
 
 ##Returns hydro_capacity_factor table based on province and year
-def return_hydro_cf(year, province):
+def return_hydro_cf(year, province, limit):
     if not year:
         raise InvalidUsage('No year provided', status_code=404)
     elif not province:
@@ -449,6 +469,10 @@ def return_hydro_cf(year, province):
                 (local_time LIKE '{int(year) + 1}%' AND \
                 annual_hour_ending = 8760));"
 
+    if limit:
+        if not limit.isdigit():
+            raise InvalidUsage('Limit is not an integer',status_code=404)
+        query = query.replace(";", f" LIMIT {limit};")
     result = send_query(query)
 
     ## Handling empty tables and bad requests
@@ -468,7 +492,7 @@ def return_hydro_cf(year, province):
     return json.dumps(result, cls= Encoder)
 
 ##Returns the transfers between a specified province and US region
-def return_international_hourly_transfers(year, province, state):
+def return_international_hourly_transfers(year, province, state, limit):
     ## Check if the correct parameters were given
     if not year:
         raise InvalidUsage('No year provided', status_code=404)
@@ -485,6 +509,10 @@ def return_international_hourly_transfers(year, province, state):
                 (local_time LIKE '{int(year) + 1}%' AND \
                 annual_hour_ending = 8760));"
 
+    if limit:
+        if not limit.isdigit():
+            raise InvalidUsage('Limit is not an integer',status_code=404)
+        query = query.replace(";", f" LIMIT {limit};")
     result = send_query(query)
     ## Handling empty tables and bad requests
     if result == 0:
@@ -503,7 +531,7 @@ def return_international_hourly_transfers(year, province, state):
     return json.dumps(result, cls= Encoder)
 
 ##Returns the transfers between two specified provinces
-def return_interprovincial_hourly_transfer(year, province_1, province_2):
+def return_interprovincial_hourly_transfer(year, province_1, province_2, limit):
     ## Check if the correct parameters were given
     if not year:
         raise InvalidUsage('No year provided',status_code=404)
@@ -517,6 +545,11 @@ def return_interprovincial_hourly_transfer(year, province_1, province_2):
                 (local_time LIKE '{year}%' OR \
                 (local_time LIKE '{int(year) + 1}%' AND \
                 annual_hour_ending = 8760));"
+    
+    if limit:
+        if not limit.isdigit():
+            raise InvalidUsage('Limit is not an integer',status_code=404)
+        query = query.replace(";", f" LIMIT {limit};")
     result = send_query(query)
 
     ## Handling empty tables and bad requests
@@ -535,7 +568,7 @@ def return_interprovincial_hourly_transfer(year, province_1, province_2):
     return json.dumps(result, cls= Encoder)
 
 ##Returns the demand in a specified province
-def return_provincial_hourly_demand(year, province):
+def return_provincial_hourly_demand(year, province, limit):
     ## Check if the correct parameters were given
     if not year:
         raise InvalidUsage('No year provided',status_code=404)
@@ -549,6 +582,10 @@ def return_provincial_hourly_demand(year, province):
                 (local_time LIKE '{int(year) + 1}%' AND \
                 annual_hour_ending = 8760));"
     
+    if limit:
+        if not limit.isdigit():
+            raise InvalidUsage('Limit is not an integer',status_code=404)
+        query = query.replace(";", f" LIMIT {limit};")
     result = send_query(query)
     ## Handling bad requests
     if result == 0:
@@ -566,7 +603,7 @@ def return_provincial_hourly_demand(year, province):
     return json.dumps(result, cls= Encoder)
 
 ##Returns generators filtered by generation type
-def return_generator_type(province, gen_type):
+def return_generator_type(province, gen_type, limit):
     ## Handling unknown generator type
     if gen_type not in gen_types:
         raise InvalidUsage('Invalid generator type',status_code=404)
@@ -577,6 +614,10 @@ def return_generator_type(province, gen_type):
                 WHERE gen_type_copper = '{gen_type}' AND \
                 province = '{province}';"
     
+    if limit:
+        if not limit.isdigit():
+            raise InvalidUsage('Limit is not an integer',status_code=404)
+        query = query.replace(";", f" LIMIT {limit};")
     result = send_query(query)
 
     ## Handling bad requests and empty tables
