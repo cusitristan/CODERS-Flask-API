@@ -9,7 +9,8 @@ class TestApp(unittest.TestCase):
 	def test_start_up(self):
 		response = requests.get(BASE)
 		response_string = response.json()
-		self.assertEqual(response_string[:31],"Welcome to the CODERS database!")
+		response_code = response.status_code
+		self.assertEqual(response_code, 200)
 	
 	def test_return_docs_wrong_spelling(self):
 		response = requests.get(BASE + "/ap/doc")
@@ -30,7 +31,6 @@ class TestApp(unittest.TestCase):
 		response_string = response.json()
 		response_code = response.status_code
 		self.assertEqual(response_code, 200)
-		self.assertEqual(response_string[:34], 'Province: substations, generators,')
 
 	def test_show_tables(self):
 		response = requests.get(BASE+"/tables")
@@ -181,6 +181,17 @@ class TestApp(unittest.TestCase):
 		response = requests.get(BASE +"/substations?limit=blah")
 		response_code = response.status_code
 		self.assertEqual(response_code, 404)
+
+	def test_return_based_on_neg_int_limit(self):
+		response = requests.get(BASE +"/substations?limit=-1")
+		response_code = response.status_code
+		self.assertEqual(response_code, 404)
+
+	def test_return_based_on_0_limit(self):
+		response = requests.get(BASE +"/substations?limit=0")
+		response_code = response.status_code
+		self.assertEqual(response_code, 200)
+		self.assertEqual(len(response_dict), 0)
 
 	## TRY BREAK THE CODE
 	##=======================
